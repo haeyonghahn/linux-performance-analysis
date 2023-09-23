@@ -70,3 +70,16 @@ Out of Memory Error가 발생하는 소스를 gcc로 컴파일해서 실행을 �
 그래서 만약에 우리가 D메시지를 가지고 OOM이 발생했나 확인하고 싶을 떄, `dmesg -TL | grep -i oom`해당 옵션과 함께 D메시지를 통해서 확인을 할 수가 있다.
 
 ![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/03419ef2-c8fe-4f73-b8f0-873205823c2b)
+
+### SYN Flooding
+공격자가 대량의 SYN 패킷만 보내서 소켓을 고갈시키는 공격이다. 씬 플러딩에 대해서 이해를 하려면 먼저 TCP 3-way handshake 를 이해해야 한다. 씬 플러딩 공격을 막기 위해 SYN 패킷의 정보들을 바탕으로 `SYN Cookie`를 만든다. 그리고 그 값을 `SYN + ACK`의 시퀀스 번호로 만들어서 응답한다.     
+- SYN Cookie가 동작하면 `SYN Backlog`에 쌓지 않는다. 그래서 자원 고갈 현상이 발생하지 않는다.
+- 하지만 `TCP Option 헤더`를 무시하기 때문에 Windows Scaling 등 성능 향상을 위한 옵션이 동작하지 않는다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/e9f67ed8-2c7b-4058-b889-8e7ec133740d)
+
+그런데 요즘에는 AWS 를 사용하면 ALB 도 있고 와프 같은 것들도 있고 AWS 쉴드 같은 것들이 있어서 방어가 잘 되는 편이라서 이런 메시지를 많이 볼 수 없겠지만 혹시라도 다른 환경이라면 가능성이 있기 때문에 D메시지를 이용해서 확인을 해볼 수 있다.
+
+## 정리
+1. `dmesg` 명령을 이용해서 OOME 에러 혹은 SYN Flooding 공격이 발생하지는 않는지 확인한다.
+2. OOME 에러가 발생한다면 더 많은 메모리를 확보하고 SYN Flooding 공격이 발생하면 방화벽을 확인한다. 
