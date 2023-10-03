@@ -83,3 +83,32 @@ Out of Memory Error가 발생하는 소스를 gcc로 컴파일해서 실행을 �
 ## 정리
 1. `dmesg` 명령을 이용해서 OOME 에러 혹은 SYN Flooding 공격이 발생하지는 않는지 확인한다.
 2. OOME 에러가 발생한다면 더 많은 메모리를 확보하고 SYN Flooding 공격이 발생하면 방화벽을 확인한다. 
+
+## netstat
+네트워크 연결 정보를 확인할 때 사용되는 명령어이다. `-napo` 옵션을 주면 소켓 정보를 확인할 수 있다. 상단이 네트워크 소켓이고 하단이 유닉스 소켓이다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/00bb1e65-f84d-452a-810e-50066662817e)
+
+### 어떻게 해석할 수 있을까?
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/d3069c43-f1e4-476a-936a-5fd7a8613d9e)
+
+`10.1.10.13 주소의 22번 포트와 1.240.235.98 주소의 51566 포트가 연결되어 있다. 그리고 그 연결은 PID 2528이며 sshd 라는 이름의 프로세스가 사용 중이다`라고 해석할 수 있다.
+
+### 소켓의 상태
+`TCP 3-way handshake`는 연결을 맺을 때 모든 네트워크 문제에 시작이 되는 개념이기 때문에 다시 한 번 살펴보자.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/3920c359-0323-40b6-98b5-f4d4158eb77f)
+
+A와 B 두 종단이 있고, 한쪽이 연결읠 먼저 받는 입장이다. B가 연결을 받아서 `LISTEN` 상태가 된다. A에서 B 쪽으로 연결을 맨 처음 맺기 위해서는 `SCENE` 패킷을 보낸다. 그래서 보낸 후 A에서는 `SCENE-SENT` 상태가 된다. 그리고 `LISTEN` 상태에 있던 포트는 `SCENE-RECEIVED`라는 상태가 된다. `SCENE`을 받았다라는 것이다. 이러한 상태가 된 후에 `3-way handshake`처럼 `SCENE` + `ACK`를 다시 보내게되고 최종적으로 서로 `ACK`를 주고 받으면 `ESTABLISHED` 상태가 된다.
+
+다음으로 `TCP 4-way handshake`를 알아보자. (연결을 끊을 때)
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/56e7d60d-2f6c-4c91-855e-3e28faae62a5)
+
+앞서 `TCP 3-way handshake`를 통해 `ESTABLISHED`된 상태이다. 둘 중에 먼저 끊으려는 쪽이 `FIN`을 보낸다. `FIN`을 보내면 받은 쪽은 소켓이 `CLOSE_WAIT`상태로 바뀌고 바로 `ACK`를 보낸다. 그리고 받은 쪽에서는 `FIN_WAIT2` 상태가 된다. 다음으로 `LAST_WAIT` 상태. `CLOSE_WAIT` 상태에서 `LAST_WAIT` 상태로 넘어갈 때는 특별한 패키지가 필요 없다. 시간이 흐르면 자동으로 `LAST_WAIT` 상태가 된다. 그 다음에 정리를 하면서 `FIN`을 한 번 더 보내면 `TIME_WAIT` 상태가 되면서 이제 '정말 연결을 끊겠다'라는 의미로 `ACK`를 보내며 끊어진 상태가 된다.
+
+### 가장 자주 보게 될 상태는?
+`LISTEN`, `ESTABLISHED`, `TIME_WAIT` 세 개의 소켓들은 `netstat` 명령어를 이용해서 봤을 때 상당히 자주 볼 수 있는 상태이다.   
+
+### 바로 연결이 끊어지지 않고 깜빡깜빡 기다리다가 서버가 먼저 연결을 끊을까?
+그 이유는 `keepalive_timeout`이라는 HTTP 1.1의 스펙 중 하나이며 연결을 유지하는 설정때문이다.
