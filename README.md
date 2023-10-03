@@ -122,3 +122,47 @@ A와 B 두 종단이 있고, 한쪽이 연결읠 먼저 받는 입장이다. B�
 - `netstat` 명령어를 이용하면 네트워크 연결 정보를 확인할 수 있다.
 - 커넥션의 상태와 종단 간 IP 정보 등 서버의 네트워크 연결 정보를 확인할 수 있다.
 - `LISTEN`, `ESTABLISHED`, `TIME_WAIT`는 흔히 만나게 되는 소켓 상태이다. `CLOSE_WAIT`가 발생한다면 꼭 원인을 확인하고 조치해야 한다.
+
+## tcpdump
+`tcpdump`는 네트워크 패킷을 수집하고 이걸 가지고 어떤 문제가 있는지 우리가 분석할 수 있는 도구이다. 말 그대로 네트워크 패킷의 흐름을 전반적으로 볼 수 있다. 예를 들어, 어떤 서버에서 어떤 서버로 통신이 이루어질 때 특정 구간을 `tcpdump`를 통해서 어떤 패킷들이 어떻게 이동하는지 확인할 수 있다. 하지만 `tcpdump`를 아무런 옵션없이 입력하면 해석하기가 힘들다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/adeb06da-b747-41e1-a91c-526e25500b3e)
+
+### -nn 옵션
+프로톨콜과 포트 번호를 숫자 그대로 표현해준다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/e14faf71-b011-4fc5-911b-8858f399a437)
+
+### -vvv옵션
+출력 결과에 더 많은 정보를 담아준다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/c1b44b94-8b8a-49a1-8d48-1c4c0e16523f)
+
+### -A 옵션
+패킷의 내용도 함께 출력한다. 아래의 정보는 22번 포트이기 때문에 암호화가 돼서 아무 의미 없는 글자로 보인다. 하지만 http 라면 body의 내용들이 보이게 된다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/4ae02a2f-d23d-4852-b24b-d5197cf3c3d2)
+
+### 트러블 슈팅은 목적지와 포트가 존재한다.
+트러블 슈팅은 목적지와 포트가 존재한다. 그래서 tcpdump로 모든 패킷을 다 보지 않아도 된다. 그리고 그런 옵션으로 포트라는 옵션이 존재한다. `tcpdump -vvv -nn -A port 80` 예를 들어, `port 80 and host 10.1.1.1` 이라고 한다면 10.1.1.1로 나가면서 포트가 80인 패킷들을 잡게 된다. 아래와 같이 80 포트로 잡아보면 패킷을 잡을 수 있는데 실질적으로 `3-way handshake`과정이 tcp 덤프로 보이는 것이다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/0be0f050-23b6-4f2d-870a-6f3bacb1c11a)
+
+같은 방식으로 연결을 끊을 때 쓰는 `4-way handshake` 과정도 볼 수 있다. 
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/63c66cee-3c7e-45b7-a2ac-1f5127ca6335)
+
+### 좀 더 편하게 분석할 수 없을까?
+이때 사용되는 도구가 `wireshark(와이어샤크)`라는 도구이다. tcpdump와 wireshark는 아래와 같은 구조를 가지고 있다. tcpdump가 dump파일을 생성한다. 그러면 pcap 파일이 만들어지고 해당 파일을 로컬로 가지고와서 wireshark라는 명령으로 wireshark라는 프로그램을 열어서 분석을 하게 된다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/5e9cf856-be5c-42cf-8f48-d036a7cc5b77)
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/2fa53480-8cea-42df-bdcb-8a00e0c9da5b)
+
+## 정리
+- `tcpdump` 명령을 이용해서 네트워크 패킷을 수집하고 분석할 수 있다.
+- `-vvv -nn -A` 옵션을 이용해서 tcpdump를 좀 더 효율적으로 사용할 수 있다.
+- `host`, `port` 문구를 이용해서 특정 목적지, 특정 포트로 필터링할 수 있다.
+- `tcpdump`로 `pcap` 파일을 생성하고 `wireshark`로 분석할 수 있다.
+
+
