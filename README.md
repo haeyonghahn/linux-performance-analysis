@@ -119,7 +119,39 @@ Out of Memory Error가 발생하는 소스를 gcc로 컴파일해서 실행을 �
 buff/cache는 I/O 성능 향상을 위해 존재한다. 그래서 애플리케이션에서 메모리를 필요로 한다면 buff/cache 영역을 해제하고 애플리케이션이 사용할 수 있는 영역으로 바꾼다. 메모리를 필요로 하는데 메모리가 없다면 `OOM`이 일어난다. 그런데 OOM이 일어나기 전에 I/O 성능 향상을 위해 사용하는 buff/cache 영역이 남아 있으면 해당 영역을 해제하고 애플리케이션이 사용할 수 있는 영역으로 바꿔버린다. 메모리가 부족해서 OOM을 일으켜 프로세스를 죽여서 메모리를 확보하는 것보다는 buff/cache는 I/O 성능 향상을 위해 그냥 존재하는 것이니까 I/O 성능이 조금 떨어지더라도 메모리를 필요로 하는 애플리케이션의 메모리를 맞춰주는 것이 맞다. 그래서 모든 프로세스들이 메모리 걱정 없이 사용할 수 있도록 buff/cache 영역을 해제하고 애플리케이션을 사용할 수 있는 영역으로 바꿔버리는 것. 이것이 중요하다. 그래서 `free` 명령어를 입력했을 때 avaliable과 free를 따로 보여주는 것이다. 즉, `available`이 무엇이냐면 애플리케이션에게 줄 수 있는 메모리 양이다. `free`는 아무것도 사용하지 않은 것이니까 줄 수 있는 것이고 buff/cache는 I/O 성능 향상을 위해 임시로 있는 것이니까 해제해서 줄 수 있는 것이고. 그래서 등호가 완벽하게 들어맞진 않지만 대부분 free와 buff/cache를 합치면 얼추 available 양이 될 수 있다.
 
 ### swap
+아래의 서버는 EC2 서버이기 때문에 swap이 없도록 기본 세팅이 되어 있다. 그래도 swap이 무엇인지 알아보자. `swap` 영역은 메모리가 부족한 상황에서 사용되는 가상 메모리 공간이다. 주로 `블록 디바이스`의 일부 영역을 사용한다. 그렇다면 swap 영역이 어떻게 사용되는지 알아보자.
 
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/82a635e8-aa04-49d4-aa1a-c6bf94bd8b2e)
+
+프로세스 A와 프로세스 B가 있고 메모리 주소가 있다고 보자. 메모리 주소가 5칸 있고 프로세스 A가 3개, 프로세스 B가 2개를 사용하고 있다고 하자. 프로세스 B가 커널에게 `메모리를 주세요`라고 요청을 하면, 메모리 주소가 꽉 찬 상태에서. buff/cache를 해제할 수도 있겠지만, swap 영역을 사용하게 될 때를 생각해보자.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/58b1d6a7-ee95-464f-817c-6bd7102c298b)
+
+그러면 커널은 메모리 영역 중에 B에게 줄 메모리 영역을 확보해야 한다. 그 중에서 프로세스 A의 0번 메모리 영역을 swap 영역으로 넘겨 버리는 결정을 하게 될 수도 있다. 그래서 이렇게 swap 영역으로 넘기는 것을 swap out 이라고 부른다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/7874f814-e868-42b8-825e-1e4af089b6e1)
+
+이렇게 swap out이 되면 0번 메모리에 있는 내용이 swap 영역으로 옮겨가고 메모리 공간이 비워지고 해당 영역을 B에게 주게 된다. 그렇다면 `프로세스 A가 0번 영역을 원한다면 어떻게 될까?`
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/7b0297c7-5b2a-471b-a44d-34b8c896df2f)   
+
+0번 메모리 참조 요청이 프로세스 A로부터 발생하면 커널에게 요청이 가고 커널은 0번 메모리를 swap 영역으로 넘겼으니까 프로세스 B의 2번 메모리를 swap out 시켜버린다. 그래서 메모리 주소를 비우고 해당 영역을 swap 영역에 있는 프로세스 A의 0번 메모리를 메모리 주소로 가지고 온다. 이것을 `swap in`이라고 한다. 그리고 다시 0번을 채워놓고 0번 메모리 주소를 프로세스 A에게 전달하게 된다. swap in이 되어도 swap 영역에서 0번 메모리는 지워지지 않는다. 이 영역을 `swap cached`라고 부른다.
+
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/6a292e61-6d0c-47f2-845f-154f5187f7ed)   
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/d7b9979d-ff94-4d56-a311-020ce213a12c)   
+![image](https://github.com/haeyonghahn/linux-performance-analysis/assets/31242766/0daba4ee-1bd8-4991-af68-feffbef8e4e3)
+
+### swap 영역이 사용되면 성능 저하 발생
+swap in, swap out이 될 때 메모리를 참조한다. 프로세스 입장에서는 메모리 참조였는데, 사실은 알고보면 I/O가 일어나는 것이다. swap 영역은 메모리가 아니고 블록 디바이스이기 때문에 I/O가 일어난다. 즉, swap 영역에 사용이 된다는 것은 성능 저하가 발생한다는 것이다.
+
+### 성능이 떨어지더라도 OOM Killer에 의해 죽는 걸 막을 것이냐 vs 성능이 떨어질 바에는 OOM Killer에 의해 죽는 게 나을 것이냐
+두 가지는 애플리케이션 환경이 어떻게 동작 중이냐가 가장 중요하다. 그런데, 최근 트랜드는 swap 영역 비활성화가 트랜드이다. 위에서 볼 수 있듯이 EC2를 만들면 디폴트는 swap이 없다.
+
+### 정리
+- free 명령을 이용해서 시스템의 메모리 사용 현황을 볼 수 있다.
+- available은 실질적으로 프로세스에게 할당할 수 있는 메모리 양이다.
+- buff/cache가 높다면 I/O가 빈번하게 발생한다는 의미이다.
+- swap 영역을 사용한다는 것은 메모리가 부족하다는 신호이다.
 
 ## df
 디스크 여유 공간 및 아이노드 공간을 확인하는 명령어이다. `-h`라는 옵션을 이용해서 파티션들을 볼 수 있다. 파티션 별로 사용 중엔 Used 영역, 그리고 전체 크기, 현재 더 사용할 수 있는 크기 및 퍼센트 정도 사용했는지, 그리고 각각의 파일 시스템이 어디에 마운트 되어있는지를 확인할 수 있다.
